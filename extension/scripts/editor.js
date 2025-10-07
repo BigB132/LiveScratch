@@ -160,11 +160,20 @@ async function onTabLoad() {
     waitFor(()=>(!isNaN(parseFloat(location.pathname.split('/')[2])))).then(()=>{scratchId = location.pathname.split('/')[2];});
 
     // trap vm and store
-    let reactInst = Object.values(await getObj('div[class^="stage-wrapper_stage-wrapper_"]')).find((x) => x.child);
+    const reactElem = await getObj('div[class^="stage-wrapper_stage-wrapper_"]');
+    let reactInst = Object.values(reactElem).find(e => e.child);
+
     let childable = reactInst;
-    while (((childable = childable.child), !childable || !childable.stateNode || !childable.stateNode.props || !childable.stateNode.props.vm));
+    while (childable && (!childable.stateNode || !childable.stateNode.props || !childable.stateNode.props.vm)) {
+        childable = childable.child;
+    }
+    if (!childable || !childable.stateNode || !childable.stateNode.props || !childable.stateNode.props.vm || !childable.stateNode.context || !childable.stateNode.context.store) {
+        console.error("LiveScratch: Could not find vm or store.");
+        return;
+    }
     vm = childable.stateNode.props.vm;
     store = childable.stateNode.context.store;
+
     addButtonInjectors();
     blId = isNaN(parseFloat(location.pathname.split('/')[2])) ? '' : await getBlocklyId(scratchId); //todo: should this use the result of the getBlId function, or a more specific endpoint to authenticating project joining?
     if(!blId) {
@@ -2850,19 +2859,48 @@ livescratchButton = null;
 blDropdown = null;
 
 function doIOwnThis() {
-    return store.getState().session.session.user.id == store.getState().preview.projectInfo.author.id;
+    const state = store.getState();
+    if (
+        state &&
+        state.session &&
+        state.session.session &&
+        state.session.session.user &&
+        state.session.session.user.id &&
+        state.preview &&
+        state.preview.projectInfo &&
+        state.preview.projectInfo.author &&
+        state.preview.projectInfo.author.id
+    ) {
+        return state.session.session.user.id == state.preview.projectInfo.author.id;
+    }
+    return false;
 }
 function addButtonInjectors() {
     listenForObj('span[class*="share-button_share-button"]',
-        (shareButton)=>{
+        async (shareButton)=>{
             if(document.querySelector('livescratch-init')!==null) {return;}
+
+            await waitFor(() => {
+                const state = store.getState();
+                return (
+                    state &&
+                    state.session &&
+                    state.session.session &&
+                    state.session.session.user &&
+                    state.session.session.user.id &&
+                    state.preview &&
+                    state.preview.projectInfo &&
+                    state.preview.projectInfo.author &&
+                    state.preview.projectInfo.author.id
+                );
+            });
             // bc.children[1].children[0].innerHTML = "Become Blajingus"
 
             let container = document.createElement('livescratchContainer');
             container.style.display = 'flex';
             container.style.flexDirection = 'column';
 
-            if(!store || !doIOwnThis()) {return;} // if
+            if(!doIOwnThis()) {return;}
             let button = makeLivescratchButton(shareButton);
             livescratchButton = button;
             let dropdown = document.createElement('livescratchDropdown');

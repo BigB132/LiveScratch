@@ -153,26 +153,43 @@ async function startLivescratch(creatingNew) {
 }
 
 let livescratchDeleted=false;
+function findVmAndStore(rootNode) {
+    if (!rootNode) return null;
+    const stack = [rootNode];
+    while (stack.length > 0) {
+        const node = stack.pop();
+
+        if (node.stateNode && node.stateNode.props && node.stateNode.props.vm && node.stateNode.context && node.stateNode.context.store) {
+            return { vm: node.stateNode.props.vm, store: node.stateNode.context.store };
+        }
+
+        // This is a simplified DFS; it only traverses down the 'child' and 'sibling' chains.
+        // A full fiber tree traversal would also need to go up via 'return' and explore alternate branches,
+        // but this is generally sufficient for finding the VM in Scratch's component structure.
+        if (node.sibling) {
+            stack.push(node.sibling);
+        }
+        if (node.child) {
+            stack.push(node.child);
+        }
+    }
+    return null;
+}
+
 async function onTabLoad() {
     // Get usable scratch id
-    // await waitFor(()=>{!isNaN(parseFloat(location.pathname.split('/')[2]))})
-    // scratchId = location.pathname.split('/')[2]
     waitFor(()=>(!isNaN(parseFloat(location.pathname.split('/')[2])))).then(()=>{scratchId = location.pathname.split('/')[2];});
 
     // trap vm and store
-    const reactElem = await getObj('div[class^="stage-wrapper_stage-wrapper_"]');
-    let reactInst = Object.values(reactElem).find(e => e.child);
+    let reactInst = Object.values(await getObj('div[class^="stage-wrapper_stage-wrapper_"]')).find((x) => x.child);
+    const result = findVmAndStore(reactInst);
 
-    let childable = reactInst;
-    while (childable && (!childable.stateNode || !childable.stateNode.props || !childable.stateNode.props.vm)) {
-        childable = childable.child;
-    }
-    if (!childable || !childable.stateNode || !childable.stateNode.props || !childable.stateNode.props.vm || !childable.stateNode.context || !childable.stateNode.context.store) {
-        console.error("LiveScratch: Could not find vm or store.");
+    if (!result) {
+        console.error("LiveScratch: Failed to find vm or store after traversing fiber nodes.");
         return;
     }
-    vm = childable.stateNode.props.vm;
-    store = childable.stateNode.context.store;
+    vm = result.vm;
+    store = result.store;
 
     addButtonInjectors();
     blId = isNaN(parseFloat(location.pathname.split('/')[2])) ? '' : await getBlocklyId(scratchId); //todo: should this use the result of the getBlId function, or a more specific endpoint to authenticating project joining?
@@ -2859,19 +2876,24 @@ livescratchButton = null;
 blDropdown = null;
 
 function doIOwnThis() {
-    const state = store.getState();
-    if (
-        state &&
-        state.session &&
-        state.session.session &&
-        state.session.session.user &&
-        state.session.session.user.id &&
-        state.preview &&
-        state.preview.projectInfo &&
-        state.preview.projectInfo.author &&
-        state.preview.projectInfo.author.id
-    ) {
-        return state.session.session.user.id == state.preview.projectInfo.author.id;
+    try {
+        const state = store.getState();
+        // Defensive checks to prevent crash on undefined properties
+        if (
+            state &&
+            state.session &&
+            state.session.session &&
+            state.session.session.user &&
+            state.session.session.user.id &&
+            state.preview &&
+            state.preview.projectInfo &&
+            state.preview.projectInfo.author &&
+            state.preview.projectInfo.author.id
+        ) {
+            return state.session.session.user.id == state.preview.projectInfo.author.id;
+        }
+    } catch (e) {
+        console.error("LiveScratch: Error in doIOwnThis, store might not be ready.", e);
     }
     return false;
 }
@@ -2880,27 +2902,33 @@ function addButtonInjectors() {
         async (shareButton)=>{
             if(document.querySelector('livescratch-init')!==null) {return;}
 
+            // Wait for the Redux store to be populated with session and project info
             await waitFor(() => {
-                const state = store.getState();
-                return (
-                    state &&
-                    state.session &&
-                    state.session.session &&
-                    state.session.session.user &&
-                    state.session.session.user.id &&
-                    state.preview &&
-                    state.preview.projectInfo &&
-                    state.preview.projectInfo.author &&
-                    state.preview.projectInfo.author.id
-                );
+                try {
+                    const state = store.getState();
+                    return (
+                        state &&
+                        state.session &&
+                        state.session.session &&
+                        state.session.session.user &&
+                        state.session.session.user.id &&
+                        state.preview &&
+                        state.preview.projectInfo &&
+                        state.preview.projectInfo.author &&
+                        state.preview.projectInfo.author.id
+                    );
+                } catch (e) {
+                    return false; // Store not ready, keep waiting
+                }
             });
+
             // bc.children[1].children[0].innerHTML = "Become Blajingus"
 
             let container = document.createElement('livescratchContainer');
             container.style.display = 'flex';
             container.style.flexDirection = 'column';
 
-            if(!doIOwnThis()) {return;}
+            if(!doIOwnThis()) {return;} // if
             let button = makeLivescratchButton(shareButton);
             livescratchButton = button;
             let dropdown = document.createElement('livescratchDropdown');

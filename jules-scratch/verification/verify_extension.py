@@ -19,11 +19,11 @@ def run_verification():
         page = context.new_page()
 
         try:
-            # Navigate to a different Scratch project page to avoid rate limiting
-            page.goto("https://scratch.mit.edu/projects/99999999/")
+            # Add a delay to avoid rate limiting
+            time.sleep(5)
 
-            # Wait for the page to be mostly idle
-            page.wait_for_load_state('networkidle')
+            # Navigate to a Scratch project page
+            page.goto("https://scratch.mit.edu/projects/100000000/") # A classic project
 
             # Wait for the "Livescratch Share" button to be visible
             # This indicates that the content script has successfully injected the UI

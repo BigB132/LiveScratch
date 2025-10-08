@@ -56,6 +56,14 @@ loadUrl().then(()=>{
         console.error('Error loading server URL', error);
     });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.meta === 'getAPI-URL') {
+        sendResponse({apiURL: apiUrl});
+    }
+
+    return true;
+});
+
 /// DECS
 let uname = '*';
 let upk = undefined;

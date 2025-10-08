@@ -1,9 +1,9 @@
 console.log('livescratch Editor Inject Running...');
 // get exId
 const exId = document.querySelector('.livescratch-ext').dataset.exId;
-let apiUrl = '';
+let apiUrl = 'https://livescratchapi.waakul.com';
 chrome.runtime.sendMessage(exId, {meta: 'getAPI-URL'}, function(response){
-    apiUrl = response.apiURL;
+    if(response.apiURL) apiUrl = response.apiURL;
 });
 
 chrome.runtime.sendMessage(exId,{meta:'getUsernamePlus'},(userData)=>{apiUrl = userData.apiUrl;});
@@ -158,6 +158,7 @@ async function onTabLoad() {
     // await waitFor(()=>{!isNaN(parseFloat(location.pathname.split('/')[2]))})
     // scratchId = location.pathname.split('/')[2]
     waitFor(()=>(!isNaN(parseFloat(location.pathname.split('/')[2])))).then(()=>{scratchId = location.pathname.split('/')[2];});
+    console.log(scratchId)
 
     // trap vm and store
     let reactInst = Object.values(await getObj('div[class^="stage-wrapper_stage-wrapper_"]')).find((x) => x.child);
